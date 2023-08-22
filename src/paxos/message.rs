@@ -1,18 +1,21 @@
-use std::{collections::HashSet, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use super::{
     env::ProcessId,
-    pval::{BallotNumber, Command, PValue, SlotNumber},
+    pval::{BallotNumber, Command, PValue, SlotNumber}, ds::Accepted,
 };
 
 #[derive(Clone, Debug)]
 pub enum Message {
     P1A(ProcessId, BallotNumber),
-    P1B(ProcessId, BallotNumber, HashSet<Box<PValue>>),
+    P1B(ProcessId, BallotNumber, Accepted),
     P2A(ProcessId, BallotNumber, SlotNumber, Command),
     P2B(ProcessId, BallotNumber, SlotNumber),
     Preempt(ProcessId, BallotNumber),
-    Adopt(ProcessId, BallotNumber, HashSet<Box<PValue>>),
+    Adopt(ProcessId, BallotNumber, Accepted),
     Decision(ProcessId, SlotNumber, Command),
     Request(ProcessId, Command),
     Propose(ProcessId, SlotNumber, Command),

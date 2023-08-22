@@ -1,12 +1,11 @@
 use core::panic;
 use std::collections::{HashMap, HashSet};
 
-use log::{info, trace};
-
 use super::{
-    env::{Env, Executor, ProcessId, ProcessType, Receiver, Router, Sender},
+    ds::Accepted,
+    env::{Env, Executor, ProcessId, ProcessType, Receiver, Router},
     message::Message,
-    pval::{BallotNumber, Command, PValue, SlotNumber},
+    pval::{BallotNumber, Command, SlotNumber},
 };
 
 pub struct Leader {
@@ -57,7 +56,7 @@ impl Executor for Leader {
             let msg = reciever.get(1000);
 
             match msg {
-                Message::Propose(pid, slot, command) => {
+                Message::Propose(_, slot, command) => {
                     if !self.proposals.contains_key(&slot) {
                         self.proposals.insert(slot, Box::new(command.clone()));
                         if self.active {
@@ -65,11 +64,11 @@ impl Executor for Leader {
                         }
                     }
                 }
-                Message::Adopt(pid, ballot, values) => {
+                Message::Adopt(_, ballot, values) => {
                     if self.ballot == ballot {
                         let mut max: HashMap<SlotNumber, BallotNumber> = HashMap::new();
-                        for pv in values.iter() {
-                            let bn = max.get(&pv.slot);
+                        for (s, pv) in values.iter() {
+                            let bn = max.get(s);
 
                             if bn.map_or(true, |p| p < &self.ballot) {
                                 max.insert(pv.slot, pv.ballot.clone());
@@ -82,7 +81,7 @@ impl Executor for Leader {
                     }
                     self.active = true;
                 }
-                Message::Preempt(pid, ballot) => {
+                Message::Preempt(_, ballot) => {
                     if self.ballot < ballot {
                         let ballot = BallotNumber::new(ballot.round + 1, self.me.clone());
                         self.scout(ballot, env);
@@ -121,12 +120,12 @@ impl Executor for Scout {
             wait.insert(a.clone());
         }
 
-        let mut values: HashSet<Box<PValue>> = HashSet::new();
+        let mut values: Accepted = Accepted::new();
         while 2 * wait.len() >= env.cluster().acceptors().len() {
             let msg = reciever.get(1000);
 
             match msg {
-                Message::P1B(pid, ballot, set) => {
+                Message::P1B(pid, ballot, accepted) => {
                     if ballot != self.ballot {
                         env.router()
                             .send(&self.leader, &Message::Preempt(self.me.clone(), ballot));
@@ -134,7 +133,7 @@ impl Executor for Scout {
                     }
                     if wait.contains(&pid) {
                         wait.remove(&pid);
-                        values.extend(set);
+                        values.extend(accepted);
                     }
                 }
                 _ => panic!("not expected"),
@@ -142,18 +141,10 @@ impl Executor for Scout {
 
             env.router().send(
                 &self.leader,
-                &Message::Adopt(self.me.clone(), self.ballot.clone(), copy_set(&values)),
+                &Message::Adopt(self.me.clone(), self.ballot.clone(), values.clone()),
             )
         }
     }
-}
-
-fn copy_set(s: &HashSet<Box<PValue>>) -> HashSet<Box<PValue>> {
-    let mut res = HashSet::new();
-    for i in s.into_iter() {
-        res.insert(i.clone());
-    }
-    return res;
 }
 
 struct Commander {

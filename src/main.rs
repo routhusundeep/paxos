@@ -37,7 +37,7 @@ pub fn init() -> Result<(), SetLoggerError> {
 }
 
 fn main() {
-    init();
+    init().unwrap();
     let n_acceptors = 3;
     let n_replicas = 2;
     let n_leaders = 2;

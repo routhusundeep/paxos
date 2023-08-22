@@ -1,6 +1,7 @@
 use log::info;
 use log::trace;
 
+use super::ds::Accepted;
 use super::env::Env;
 use super::env::Executor;
 use super::env::ProcessId;
@@ -10,12 +11,15 @@ use super::env::Sender;
 use super::message::Message;
 use super::pval::BallotNumber;
 use super::pval::PValue;
+use super::pval::SlotNumber;
+use std::cmp::max;
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 pub struct Acceptor {
     me: ProcessId,
     ballot: BallotNumber,
-    accepted: HashSet<Box<PValue>>,
+    accepted: Accepted,
 }
 
 impl Acceptor {
@@ -23,7 +27,7 @@ impl Acceptor {
         Acceptor {
             me: id.clone(),
             ballot: BallotNumber::first(id),
-            accepted: HashSet::new(),
+            accepted: Accepted::new(),
         }
     }
 }
@@ -32,7 +36,7 @@ impl Executor for Acceptor {
     fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         loop {
             let msg = reciever.get(1000);
-            
+
             match msg {
                 Message::P1A(src, ballot) => {
                     let bc = ballot.clone();
@@ -42,17 +46,14 @@ impl Executor for Acceptor {
 
                     env.router().send(
                         &src,
-                        &Message::P1B(self.me.clone(), bc, copy_set(&self.accepted)),
+                        &Message::P1B(self.me.clone(), bc, self.accepted.clone()),
                     );
                 }
                 Message::P2A(src, ballot, slot, command) => {
                     if self.ballot <= ballot {
                         self.ballot = ballot;
-                        self.accepted.insert(Box::new(PValue::new(
-                            self.ballot.clone(),
-                            slot,
-                            command,
-                        )));
+                        let p = PValue::new(self.ballot.clone(), slot, command);
+                        self.accepted.insert(slot, p);
                     }
                     env.router().send(
                         &src,
@@ -63,12 +64,4 @@ impl Executor for Acceptor {
             }
         }
     }
-}
-
-fn copy_set(s: &HashSet<Box<PValue>>) -> HashSet<Box<PValue>> {
-    let mut res = HashSet::new();
-    for i in s.into_iter() {
-        res.insert(i.clone());
-    }
-    return res;
 }
