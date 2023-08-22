@@ -1,20 +1,9 @@
-use log::info;
-use log::trace;
-
-use super::ds::Accepted;
-use super::env::Env;
-use super::env::Executor;
-use super::env::ProcessId;
-use super::env::Receiver;
-use super::env::Router;
-use super::env::Sender;
-use super::message::Message;
-use super::pval::BallotNumber;
-use super::pval::PValue;
-use super::pval::SlotNumber;
-use std::cmp::max;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use super::{
+    ds::Accepted,
+    env::{Env, Executor, ProcessId, Receiver, Router},
+    message::Message,
+    pval::{BallotNumber, PValue},
+};
 
 pub struct Acceptor {
     me: ProcessId,

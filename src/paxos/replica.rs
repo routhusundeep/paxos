@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use log::{info, trace};
 
 use super::{
-    env::{Env, Executor, ProcessId, Receiver, Router, Sender},
+    env::{Env, Executor, ProcessId, Receiver, Router},
     message::Message,
     pval::{Command, SlotNumber},
 };
@@ -52,7 +52,7 @@ impl Replica {
 }
 
 impl Executor for Replica {
-    fn exec<R:Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         loop {
             let msg = reciever.get(1000);
 

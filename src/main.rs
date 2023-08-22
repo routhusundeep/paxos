@@ -1,4 +1,4 @@
-use std::{fmt::format, thread, time::Duration, vec};
+use std::{thread, time::Duration};
 
 use crate::paxos::{
     acceptor::Acceptor,

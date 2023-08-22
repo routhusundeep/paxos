@@ -4,12 +4,14 @@ Implement multi paxos in Rust . It is just a prototype intending to learn and in
 
 Features:
 * basic algorithm
-* state reduction
+* state reduction in acceptor
 
 Planned: 
 * support on TCP network
 * failure detection
-* Use Colocation
+* Use colocation
+* garbage collection on leader
+* leases for leader
 
 References:
 * [Paxos made simple](https://github.com/papers-we-love/papers-we-love/blob/main/distributed_systems/paxos-made-simple.pdf)

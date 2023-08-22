@@ -1,5 +1,4 @@
 use std::collections::{hash_map::Iter, HashMap};
-use std::hash::Hash;
 
 use super::pval::{PValue, SlotNumber};
 

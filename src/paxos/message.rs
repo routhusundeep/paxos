@@ -1,11 +1,9 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-};
+use std::fmt::Display;
 
 use super::{
+    ds::Accepted,
     env::ProcessId,
-    pval::{BallotNumber, Command, PValue, SlotNumber}, ds::Accepted,
+    pval::{BallotNumber, Command, SlotNumber},
 };
 
 #[derive(Clone, Debug)]

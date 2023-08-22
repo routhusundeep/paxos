@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    fmt::Display,
-    sync::{Mutex, RwLock},
-};
+use std::{collections::HashMap, fmt::Display, sync::Mutex};
 
 use super::message::Message;
 
@@ -37,7 +32,7 @@ pub enum ProcessType {
 }
 
 pub struct Cluster {
-    map: Mutex<HashMap<ProcessType, Vec<ProcessId>>>,
+    map: Mutex<HashMap<ProcessType, Vec<ProcessId>>>, // TODO: make it concurrent hashmap
 }
 
 impl Cluster {
@@ -56,7 +51,8 @@ impl Cluster {
     }
 
     fn get(&self, t: ProcessType) -> Vec<ProcessId> {
-        return Self::copy_vec(self.map.lock().unwrap().get(&t).unwrap());
+        let guard = self.map.lock();
+        return Self::copy_vec(guard.unwrap().get(&t).unwrap());
     }
 
     pub fn acceptors(&self) -> Vec<ProcessId> {

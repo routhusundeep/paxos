@@ -1,7 +1,7 @@
 use crossbeam::channel;
-use log::{debug, info, trace};
+use log::debug;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     sync::{Arc, Mutex},
     thread,
     time::Duration,
