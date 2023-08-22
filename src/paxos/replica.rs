@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use log::{info, trace};
 
 use super::{
-    env::{Env, Executor, ProcessId, Receiver, Sender},
+    env::{Env, Executor, ProcessId, Receiver, Router, Sender},
     message::Message,
     pval::{Command, SlotNumber},
 };
@@ -26,14 +26,14 @@ impl Replica {
         }
     }
 
-    pub fn propose<R: Receiver, S: Sender, E: Env<R, S>>(&mut self, c: Command, env: &E) {
+    pub fn propose<T: Router, E: Env<T>>(&mut self, c: Command, env: &E) {
         if self.decisions.values().all(|com: &Command| c != *com) {
             let mut i = 1;
             loop {
                 if !self.proposals.contains_key(&i) && !self.decisions.contains_key(&i) {
                     self.proposals.insert(i, c.clone());
                     for l in env.cluster().leaders().iter() {
-                        env.sender()
+                        env.router()
                             .send(l, &Message::Propose(self.me.clone(), i, c.clone()));
                     }
                     break;
@@ -51,10 +51,10 @@ impl Replica {
     }
 }
 
-impl<R: Receiver, S: Sender> Executor<R, S> for Replica {
-    fn exec<E: Env<R, S>>(mut self, env: &mut E) {
+impl Executor for Replica {
+    fn exec<R:Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         loop {
-            let msg = env.read(&self.me);
+            let msg = reciever.get(1000);
 
             match msg {
                 Message::Request(_, command) => {

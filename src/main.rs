@@ -2,9 +2,9 @@ use std::{fmt::format, thread, time::Duration, vec};
 
 use crate::paxos::{
     acceptor::Acceptor,
-    env::{Env, ProcessId, Sender},
+    env::{Env, ProcessId, Router},
     leader::Leader,
-    local::{Channel, InMemEnv},
+    local::InMemEnv,
     message::Message,
     pval::Command,
     replica::Replica,
@@ -43,7 +43,10 @@ fn main() {
     let n_leaders = 2;
     let n_requests = 10;
 
-    let mut env = InMemEnv::new(Channel::new_default);
+    let mut env = InMemEnv::new(|| {
+        let (s, r) = crossbeam::channel::unbounded();
+        return (r, s);
+    });
 
     for i in 1..n_acceptors + 1 {
         let id = ProcessId::new(format!("Acceptor:{}", i));
@@ -73,7 +76,7 @@ fn main() {
     }
 
     for i in 1..n_requests + 1 {
-        let s = env.sender();
+        let s = env.router();
         let client = ProcessId::new(format!("Client:{}", i));
 
         for j in 1..n_replicas + 1 {

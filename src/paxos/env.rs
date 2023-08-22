@@ -83,8 +83,12 @@ impl Cluster {
     }
 }
 
-pub trait Sender {
+pub trait Router {
     fn send(&self, p: &ProcessId, m: &Message);
+}
+
+pub trait Sender {
+    fn send(&self, m: &Message);
 }
 
 #[derive(Debug)]
@@ -94,30 +98,23 @@ pub enum GetErr {
 
 pub trait Receiver {
     fn try_get(&self) -> Result<Message, GetErr>;
-    fn add(&self, m: Message);
+    fn get(&self, sleep: u64) -> Message;
 }
 
-pub trait Executor<R, S>
-where
-    R: Receiver,
-    S: Sender,
-{
-    fn exec<E: Env<R, S>>(self, env: &mut E);
+pub trait Executor {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &mut E);
 }
 
-pub trait Env<R, S>
+pub trait Env<T>
 where
-    R: Receiver,
-    S: Sender,
+    T: Router,
 {
-    fn register<E: Executor<R, S> + Send + 'static>(
+    fn register<E: Executor + Send + 'static>(
         &mut self,
         id: ProcessId,
         t: ProcessType,
         executor: E,
     );
-    fn read(&self, id: &ProcessId) -> Message;
-    fn create_receiver(&self) -> R;
-    fn sender(&self) -> &S;
+    fn router(&self) -> T;
     fn cluster(&self) -> &Cluster;
 }

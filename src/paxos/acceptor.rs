@@ -5,6 +5,7 @@ use super::env::Env;
 use super::env::Executor;
 use super::env::ProcessId;
 use super::env::Receiver;
+use super::env::Router;
 use super::env::Sender;
 use super::message::Message;
 use super::pval::BallotNumber;
@@ -27,11 +28,11 @@ impl Acceptor {
     }
 }
 
-impl<R: Receiver, S: Sender> Executor<R, S> for Acceptor {
-    fn exec<E: Env<R, S>>(mut self, env: &mut E) {
+impl Executor for Acceptor {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         loop {
-            let msg = env.read(&self.me);
-
+            let msg = reciever.get(1000);
+            
             match msg {
                 Message::P1A(src, ballot) => {
                     let bc = ballot.clone();
@@ -39,7 +40,7 @@ impl<R: Receiver, S: Sender> Executor<R, S> for Acceptor {
                         self.ballot = ballot;
                     }
 
-                    env.sender().send(
+                    env.router().send(
                         &src,
                         &Message::P1B(self.me.clone(), bc, copy_set(&self.accepted)),
                     );
@@ -53,7 +54,7 @@ impl<R: Receiver, S: Sender> Executor<R, S> for Acceptor {
                             command,
                         )));
                     }
-                    env.sender().send(
+                    env.router().send(
                         &src,
                         &Message::P2B(self.me.clone(), self.ballot.clone(), slot),
                     )

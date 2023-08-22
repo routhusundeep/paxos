@@ -8,145 +8,110 @@ use std::{
 };
 
 use super::{
-    env::{Cluster, Env, Executor, GetErr, ProcessId, ProcessType, Receiver, Sender},
+    env::{Cluster, Env, Executor, GetErr, ProcessId, ProcessType, Receiver, Router, Sender},
     message::Message,
 };
 
-#[derive(Clone)]
-pub struct Channel<T> {
-    sleep: u64,
-    s: channel::Sender<T>,
-    r: channel::Receiver<T>,
+impl Sender for channel::Sender<Message> {
+    fn send(&self, m: &Message) {
+        let res = self.send(m.clone());
+        match res {
+            Ok(()) => {}
+            Err(e) => {
+                debug!("errored during send {}", e)
+            }
+        }
+    }
 }
 
-impl<T> Channel<T> {
-    fn send(&self, m: T) -> Result<(), channel::SendError<T>> {
-        self.s.send(m)
-    }
-
-    fn get(&self) -> Result<T, GetErr> {
-        // println!("{:#?}", thread::current().id());
-        let g = self.r.try_recv();
+impl Receiver for channel::Receiver<Message> {
+    fn try_get(&self) -> Result<Message, GetErr> {
+        let g = self.try_recv();
         match g {
             Ok(m) => return Ok(m),
             Err(_) => Err(GetErr::None),
         }
     }
-}
 
-impl Receiver for Channel<Message> {
-    fn try_get(&self) -> Result<Message, GetErr> {
-        self.get()
-    }
-
-    fn add(&self, m: Message) {
-        let g = self.send(m);
-        g.unwrap()
-    }
-}
-
-impl<T> Channel<T> {
-    pub fn new(sleep: u64) -> Channel<T> {
-        let (s, r): (channel::Sender<T>, channel::Receiver<T>) = channel::unbounded();
-        Channel {
-            sleep: sleep,
-            s: s,
-            r,
+    fn get(&self, sleep: u64) -> Message {
+        loop {
+            match self.try_get() {
+                Ok(m) => return m,
+                Err(_) => thread::sleep(Duration::from_nanos(sleep)),
+            }
         }
     }
-
-    pub fn new_default() -> Channel<T> {
-        Channel::new(1000)
-    }
 }
 
-pub struct MessageRouter<R> {
-    sleep: u64,
-    m: Mutex<HashMap<ProcessId, R>>,
+#[derive(Clone)]
+pub struct RouterMap<S>
+where
+    S: Sender,
+{
+    m: Arc<Mutex<HashMap<ProcessId, S>>>,
 }
 
-impl<R: Receiver> MessageRouter<R> {
-    fn new(sleep: u64) -> MessageRouter<R> {
-        MessageRouter {
-            sleep: sleep,
-            m: Mutex::new(HashMap::new()),
+impl<S> RouterMap<S>
+where
+    S: Sender,
+{
+    fn new(sleep: u64) -> RouterMap<S> {
+        RouterMap {
+            m: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+}
 
-    fn put(&self, id: ProcessId, r: R) {
+impl<S: Sender> RouterMap<S> {
+    fn add(&self, id: ProcessId, r: S) {
         self.m.lock().unwrap().insert(id, r);
     }
+}
 
-    fn get(&self, id: &ProcessId) -> Message {
-        loop {
-            {
-                // print!("{:#?}", thread::current().id());
-                let guard = self.m.lock();
-                match guard.unwrap().get(id).unwrap().try_get() {
-                    Ok(m) => return m,
-                    Err(_) => {}
-                }
-            }
-            thread::sleep(Duration::from_nanos(self.sleep));
-        }
-    }
-
-    fn send(&self, id: &ProcessId, m: Message) {
-        match self.m.lock().unwrap().get_mut(&id) {
-            Some(r) => r.add(m.clone()),
+impl<S: Sender> Router for RouterMap<S> {
+    fn send(&self, id: &ProcessId, m: &Message) {
+        debug!("{} ----> {} ...... message: {}", m.id(), id, m);
+        let guard = self.m.lock();
+        match guard.unwrap().get_mut(&id) {
+            Some(r) => r.send(&m),
             None => panic!("not possible"),
         }
     }
 }
 
-impl<R: Receiver> Sender for MessageRouter<R> {
-    fn send(&self, id: &ProcessId, m: &Message) {
-        debug!("{} ----> {} ...... message: {}", m.id(), id, m);
-        self.send(id, m.clone())
-    }
-}
-
 #[derive(Clone)]
-pub struct InMemEnv<R>
+pub struct InMemEnv<R, S>
 where
     R: Receiver,
+    S: Sender,
 {
-    new_receiver_fn: fn() -> R,
-    sender: Arc<MessageRouter<R>>,
+    new_channel_fn: fn() -> (R, S),
+    sender: RouterMap<S>,
     cluster: Arc<Cluster>,
 }
 
-impl<R> Env<R, MessageRouter<R>> for InMemEnv<R>
+impl<R, S> Env<RouterMap<S>> for InMemEnv<R, S>
 where
     R: Receiver + Send + Clone + 'static,
+    S: Sender + Send + Clone + 'static,
 {
-    fn create_receiver(&self) -> R {
-        (self.new_receiver_fn)()
+    fn router(&self) -> RouterMap<S> {
+        self.sender.clone()
     }
 
-    fn sender(&self) -> &MessageRouter<R> {
-        &self.sender
-    }
-
-    fn register<E: Executor<R, MessageRouter<R>> + Send + 'static>(
+    fn register<E: Executor + Send + 'static>(
         &mut self,
         id: ProcessId,
         t: ProcessType,
         executor: E,
     ) {
-        let new_receiver = <InMemEnv<R> as Env<R, MessageRouter<R>>>::create_receiver(self);
-        self.sender.put(id.clone(), new_receiver);
+        let (new_receiver, new_sender) = (self.new_channel_fn)();
+        self.sender.add(id.clone(), new_sender);
         self.cluster.add(t, id.clone());
         let mut clone = self.clone();
         thread::spawn(move || {
-            executor.exec(&mut clone);
+            executor.exec(new_receiver, &mut clone);
         });
-    }
-
-    fn read(&self, id: &ProcessId) -> Message {
-        let m = self.sender.get(id);
-        debug!("{} <---- {} ...... message: {}", id, m.id(), m);
-        return m;
     }
 
     fn cluster(&self) -> &Cluster {
@@ -154,100 +119,13 @@ where
     }
 }
 
-impl<R: Receiver> InMemEnv<R> {
-    pub fn new(new_receiver_fn: fn() -> R) -> InMemEnv<R> {
-        let router = MessageRouter::new(1000);
+impl<R: Receiver, S: Sender> InMemEnv<R, S> {
+    pub fn new(new_channel_fn: fn() -> (R, S)) -> InMemEnv<R, S> {
+        let router = RouterMap::new(1000);
         InMemEnv {
-            new_receiver_fn: new_receiver_fn,
-            sender: Arc::new(router),
+            new_channel_fn: new_channel_fn,
+            sender: router,
             cluster: Arc::new(Cluster::new()),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        fmt::format,
-        thread::{self, JoinHandle},
-        time::Duration,
-    };
-
-    use crate::paxos::{env::ProcessId, local::Channel, message::Message, pval::Command};
-
-    use super::MessageRouter;
-
-    #[test]
-    fn router_test() {
-        let router = MessageRouter::new(1000);
-
-        let n_chan = 5;
-        let n_send = 5;
-        let n_get = 5;
-
-        for i in 1..n_chan + 1 {
-            let id = ProcessId::new(format!("{}", 1));
-            router.put(id, Channel::new_default());
-        }
-
-        for i in 1..n_chan + 1 {
-            let id = ProcessId::new(format!("{}", 1));
-            for j in 1..n_send + 1 {
-                router.send(
-                    &id.clone(),
-                    Message::Request(
-                        id.clone(),
-                        Command::new_from_str(
-                            id.clone(),
-                            format!("{}:{}", i, j).to_string(),
-                            "".to_string(),
-                        ),
-                    ),
-                );
-            }
-        }
-
-        for i in 1..n_chan + 1 {
-            let id = ProcessId::new(format!("{}", 1));
-            for j in 1..n_send + 1 {
-                println!("{}", router.get(&id));
-            }
-        }
-    }
-
-    #[test]
-    fn channel_test() {
-        let wq: Channel<usize> = Channel::new(100);
-
-        let nget: usize = 100;
-        let nput: usize = 100;
-
-        let mut handles: Vec<JoinHandle<usize>> = vec![];
-        for i in 1..nput {
-            let val = wq.clone();
-            thread::spawn(move || {
-                val.send(i);
-            });
-        }
-
-        for _ in 1..nget {
-            let mut val = wq.clone();
-            let jh = thread::spawn(move || {
-                return val.get().unwrap();
-            });
-            handles.push(jh);
-        }
-
-        let mut res = vec![];
-        for jh in handles.into_iter() {
-            let v = jh.join().unwrap();
-            res.push(v);
-        }
-
-        res.sort();
-        assert_eq!(nget, res.len() + 1);
-
-        let exp: Vec<usize> = (1..nget).collect();
-        assert_eq!(0, res.iter().zip(&exp).filter(|&(a, b)| a != b).count());
     }
 }

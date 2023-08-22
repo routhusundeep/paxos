@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use log::{info, trace};
 
 use super::{
-    env::{Env, Executor, ProcessId, ProcessType, Receiver, Sender},
+    env::{Env, Executor, ProcessId, ProcessType, Receiver, Router, Sender},
     message::Message,
     pval::{BallotNumber, Command, PValue, SlotNumber},
 };
@@ -26,13 +26,13 @@ impl Leader {
         }
     }
 
-    fn scout<R: Receiver, S: Sender, E: Env<R, S>>(&self, ballot: BallotNumber, env: &mut E) {
+    fn scout<T: Router, E: Env<T>>(&self, ballot: BallotNumber, env: &mut E) {
         let sid = ProcessId::new(format!("Scout:{}:{}", self.me.name(), ballot));
         let scout = Scout::new(sid.clone(), self.me.clone(), self.ballot.clone());
         env.register(scout.me.clone(), ProcessType::Scout, scout);
     }
 
-    fn commander<R: Receiver, S: Sender, E: Env<R, S>>(
+    fn commander<T: Router, E: Env<T>>(
         &self,
         ballot: BallotNumber,
         slot: SlotNumber,
@@ -50,11 +50,11 @@ impl Leader {
     }
 }
 
-impl<R: Receiver, S: Sender> Executor<R, S> for Leader {
-    fn exec<E: Env<R, S>>(mut self, env: &mut E) {
+impl Executor for Leader {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         self.scout(self.ballot.clone(), env);
         loop {
-            let msg = env.read(&self.me);
+            let msg = reciever.get(1000);
 
             match msg {
                 Message::Propose(pid, slot, command) => {
@@ -112,23 +112,23 @@ impl<'a> Scout {
     }
 }
 
-impl<R: Receiver, S: Sender> Executor<R, S> for Scout {
-    fn exec<E: Env<R, S>>(self, env: &mut E) {
+impl Executor for Scout {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &mut E) {
         let msg = Message::P1A(self.me.clone(), self.ballot.clone());
         let mut wait: HashSet<ProcessId> = HashSet::new();
         for a in env.cluster().acceptors().iter() {
-            env.sender().send(a, &msg);
+            env.router().send(a, &msg);
             wait.insert(a.clone());
         }
 
         let mut values: HashSet<Box<PValue>> = HashSet::new();
         while 2 * wait.len() >= env.cluster().acceptors().len() {
-            let msg = env.read(&self.me);
+            let msg = reciever.get(1000);
 
             match msg {
                 Message::P1B(pid, ballot, set) => {
                     if ballot != self.ballot {
-                        env.sender()
+                        env.router()
                             .send(&self.leader, &Message::Preempt(self.me.clone(), ballot));
                         return;
                     }
@@ -140,7 +140,7 @@ impl<R: Receiver, S: Sender> Executor<R, S> for Scout {
                 _ => panic!("not expected"),
             }
 
-            env.sender().send(
+            env.router().send(
                 &self.leader,
                 &Message::Adopt(self.me.clone(), self.ballot.clone(), copy_set(&values)),
             )
@@ -182,8 +182,8 @@ impl<'a> Commander {
     }
 }
 
-impl<'a, R: Receiver, S: Sender> Executor<R, S> for Commander {
-    fn exec<E: Env<R, S>>(self, env: &mut E) {
+impl Executor for Commander {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &mut E) {
         let msg = Message::P2A(
             self.me.clone(),
             self.ballot.clone(),
@@ -192,12 +192,12 @@ impl<'a, R: Receiver, S: Sender> Executor<R, S> for Commander {
         );
         let mut wait: HashSet<ProcessId> = HashSet::new();
         for a in env.cluster().acceptors().iter() {
-            env.sender().send(a, &msg);
+            env.router().send(a, &msg);
             wait.insert(a.clone());
         }
 
         while 2 * wait.len() >= env.cluster().acceptors().len() {
-            let msg = env.read(&self.me);
+            let msg = reciever.get(1000);
             match msg {
                 Message::P2B(pid, ballot, slot) => {
                     if self.ballot == ballot {
@@ -205,7 +205,7 @@ impl<'a, R: Receiver, S: Sender> Executor<R, S> for Commander {
                             wait.remove(&pid);
                         }
                     } else {
-                        env.sender()
+                        env.router()
                             .send(&self.leader, &Message::Preempt(self.me.clone(), ballot));
                         return;
                     }
@@ -215,7 +215,7 @@ impl<'a, R: Receiver, S: Sender> Executor<R, S> for Commander {
         }
 
         for r in env.cluster().replicas().iter() {
-            env.sender().send(
+            env.router().send(
                 r,
                 &Message::Decision(self.me.clone(), self.slot, self.command.clone()),
             );
