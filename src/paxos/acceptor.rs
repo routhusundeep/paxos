@@ -2,7 +2,7 @@ use super::{
     ds::Accepted,
     env::{Env, Executor, ProcessId, Receiver, Router},
     message::Message,
-    pval::{BallotNumber, PValue},
+    pval::{BallotNumber, PValue}, constants::SLEEP_TIME,
 };
 
 pub struct Acceptor {
@@ -24,7 +24,7 @@ impl Acceptor {
 impl Executor for Acceptor {
     fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         loop {
-            let msg = reciever.get(1000);
+            let msg = reciever.get(SLEEP_TIME);
 
             match msg {
                 Message::P1A(src, ballot) => {

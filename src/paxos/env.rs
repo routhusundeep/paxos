@@ -1,24 +1,25 @@
 use std::{collections::HashMap, fmt::Display, sync::Mutex};
 
+use uuid::Uuid;
+
 use super::message::Message;
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Hash, Debug)]
-pub struct ProcessId {
-    name: String,
+#[derive(Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Debug)]
+pub enum ProcessId {
+    Local(Uuid),
 }
 impl ProcessId {
-    pub fn new(s: String) -> ProcessId {
-        ProcessId { name: s }
-    }
-
-    pub fn name(&self) -> String {
-        self.name.clone()
+    pub fn new() -> ProcessId {
+        let id = Uuid::new_v4();
+        ProcessId::Local(id)
     }
 }
 
 impl Display for ProcessId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+        match self {
+            ProcessId::Local(u) => write!(f, "{}", u),
+        }
     }
 }
 

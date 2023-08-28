@@ -49,7 +49,7 @@ fn main() {
     });
 
     for i in 1..n_acceptors + 1 {
-        let id = ProcessId::new(format!("Acceptor:{}", i));
+        let id = ProcessId::new();
         env.register(
             id.clone(),
             paxos::env::ProcessType::Acceptor,
@@ -58,7 +58,7 @@ fn main() {
     }
 
     for i in 1..n_leaders + 1 {
-        let id = ProcessId::new(format!("Leader:{}", i));
+        let id = ProcessId::new();
         env.register(
             id.clone(),
             paxos::env::ProcessType::Leader,
@@ -67,7 +67,7 @@ fn main() {
     }
 
     for i in 1..n_replicas + 1 {
-        let id = ProcessId::new(format!("Replica:{}", i));
+        let id = ProcessId::new();
         env.register(
             id.clone(),
             paxos::env::ProcessType::Replica,
@@ -77,12 +77,11 @@ fn main() {
 
     for i in 1..n_requests + 1 {
         let s = env.router();
-        let client = ProcessId::new(format!("Client:{}", i));
+        let client = ProcessId::new();
 
-        for j in 1..n_replicas + 1 {
-            let id = ProcessId::new(format!("Replica:{}", j));
+        for j in env.cluster().replicas().iter() {
             s.send(
-                &id,
+                j,
                 &Message::Request(
                     client.clone(),
                     Command::new_from_str(

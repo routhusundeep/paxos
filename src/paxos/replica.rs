@@ -6,7 +6,7 @@ use log::{info, trace};
 use super::{
     env::{Env, Executor, ProcessId, Receiver, Router},
     message::Message,
-    pval::{Command, SlotNumber},
+    pval::{Command, SlotNumber}, constants::SLEEP_TIME,
 };
 
 pub struct Replica {
@@ -54,7 +54,7 @@ impl Replica {
 impl Executor for Replica {
     fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         loop {
-            let msg = reciever.get(1000);
+            let msg = reciever.get(SLEEP_TIME);
 
             match msg {
                 Message::Request(_, command) => {

@@ -2,6 +2,7 @@ use core::panic;
 use std::collections::{HashMap, HashSet};
 
 use super::{
+    constants::SLEEP_TIME,
     ds::Accepted,
     env::{Env, Executor, ProcessId, ProcessType, Receiver, Router},
     message::Message,
@@ -26,7 +27,7 @@ impl Leader {
     }
 
     fn scout<T: Router, E: Env<T>>(&self, ballot: BallotNumber, env: &mut E) {
-        let sid = ProcessId::new(format!("Scout:{}:{}", self.me.name(), ballot));
+        let sid = ProcessId::new();
         let scout = Scout::new(sid.clone(), self.me.clone(), self.ballot.clone());
         env.register(scout.me.clone(), ProcessType::Scout, scout);
     }
@@ -38,12 +39,7 @@ impl Leader {
         command: Command,
         env: &mut E,
     ) {
-        let cid = ProcessId::new(format!(
-            "Commander:{}:{}:{}",
-            self.me,
-            command.req_id_str(),
-            command.op_str()
-        ));
+        let cid = ProcessId::new();
         let commander = Commander::new(&cid, &self.me, ballot, slot, command);
         env.register(commander.me.clone(), ProcessType::Commander, commander);
     }
@@ -53,7 +49,7 @@ impl Executor for Leader {
     fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
         self.scout(self.ballot.clone(), env);
         loop {
-            let msg = reciever.get(1000);
+            let msg = reciever.get(SLEEP_TIME);
 
             match msg {
                 Message::Propose(_, slot, command) => {
@@ -100,9 +96,8 @@ struct Scout {
     ballot: BallotNumber,
 }
 
-impl<'a> Scout {
+impl Scout {
     fn new(id: ProcessId, leader: ProcessId, ballot: BallotNumber) -> Scout {
-        //
         Scout {
             me: id,
             leader: leader,
@@ -122,7 +117,7 @@ impl Executor for Scout {
 
         let mut values: Accepted = Accepted::new();
         while 2 * wait.len() >= env.cluster().acceptors().len() {
-            let msg = reciever.get(1000);
+            let msg = reciever.get(SLEEP_TIME);
 
             match msg {
                 Message::P1B(pid, ballot, accepted) => {
@@ -155,7 +150,7 @@ struct Commander {
     command: Command,
 }
 
-impl<'a> Commander {
+impl Commander {
     fn new(
         id: &ProcessId,
         leader: &ProcessId,
@@ -188,7 +183,7 @@ impl Executor for Commander {
         }
 
         while 2 * wait.len() >= env.cluster().acceptors().len() {
-            let msg = reciever.get(1000);
+            let msg = reciever.get(SLEEP_TIME);
             match msg {
                 Message::P2B(pid, ballot, slot) => {
                     if self.ballot == ballot {
