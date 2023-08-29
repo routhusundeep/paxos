@@ -233,6 +233,7 @@ dependencies = [
  "bytes",
  "crossbeam",
  "log",
+ "once_cell",
  "protobuf",
  "zmq",
 ]

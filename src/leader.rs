@@ -26,7 +26,7 @@ impl Leader {
         }
     }
 
-    fn scout<T: Router, E: Env<T>>(&self, ballot: BallotNumber, env: &mut E) {
+    fn scout<T: Router, E: Env<T>>(&self, ballot: BallotNumber, env: &'static E) {
         let sid = ProcessId::new(self.me.ip, self.me.port, env.new_id());
         let scout = Scout::new(sid.clone(), self.me.clone(), self.ballot.clone());
         env.register(scout.me.clone(), ProcessType::Scout, scout);
@@ -37,7 +37,7 @@ impl Leader {
         ballot: BallotNumber,
         slot: SlotNumber,
         command: Command,
-        env: &mut E,
+        env: &'static E,
     ) {
         let cid = ProcessId::new(self.me.ip, self.me.port, env.new_id());
         let commander = Commander::new(&cid, &self.me, ballot, slot, command);
@@ -46,7 +46,7 @@ impl Leader {
 }
 
 impl Executor for Leader {
-    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &'static E) {
         self.scout(self.ballot.clone(), env);
         loop {
             let msg = reciever.get(SLEEP_TIME);
@@ -107,7 +107,7 @@ impl Scout {
 }
 
 impl Executor for Scout {
-    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &mut E) {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &E) {
         let msg = Message::P1A(self.me.clone(), self.ballot.clone());
         let mut wait: HashSet<ProcessId> = HashSet::new();
         for a in env.cluster().acceptors().iter() {
@@ -169,7 +169,7 @@ impl Commander {
 }
 
 impl Executor for Commander {
-    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &mut E) {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &E) {
         let msg = Message::P2A(
             self.me.clone(),
             self.ballot.clone(),

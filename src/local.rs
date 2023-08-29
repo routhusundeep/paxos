@@ -6,7 +6,7 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc, Mutex,
     },
-    thread,
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
@@ -46,12 +46,11 @@ impl Receiver for channel::Receiver<Message> {
     }
 }
 
-#[derive(Clone)]
 pub struct RouterMap<S>
 where
     S: Sender,
 {
-    m: Arc<Mutex<HashMap<ProcessId, S>>>,
+    m: Mutex<HashMap<ProcessId, S>>,
 }
 
 impl<S> RouterMap<S>
@@ -60,7 +59,7 @@ where
 {
     fn new(sleep: u64) -> RouterMap<S> {
         RouterMap {
-            m: Arc::new(Mutex::new(HashMap::new())),
+            m: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -90,21 +89,22 @@ where
 {
     id_gen: Arc<AtomicU32>,
     new_channel_fn: fn() -> (R, S),
-    sender: RouterMap<S>,
+    sender: Arc<RouterMap<S>>,
     cluster: Arc<Cluster>,
+    join_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
 }
 
 impl<R, S> Env<RouterMap<S>> for InMemEnv<R, S>
 where
-    R: Receiver + Send + Clone + 'static,
-    S: Sender + Send + Clone + 'static,
+    R: Receiver + Send,
+    S: Sender + Send,
 {
-    fn router(&self) -> RouterMap<S> {
-        self.sender.clone()
+    fn router(&self) -> &RouterMap<S> {
+        &self.sender
     }
 
     fn register<E: Executor + Send + 'static>(
-        &mut self,
+        &'static self,
         id: ProcessId,
         t: ProcessType,
         executor: E,
@@ -112,17 +112,18 @@ where
         let (new_receiver, new_sender) = (self.new_channel_fn)();
         self.sender.add(id.clone(), new_sender);
         self.cluster.add(t, id.clone());
-        let mut clone = self.clone();
-        thread::spawn(move || {
-            executor.exec(new_receiver, &mut clone);
+        let clone = self.clone();
+        let jh = thread::spawn(move || {
+            executor.exec(new_receiver, clone);
         });
+        self.join_handles.lock().unwrap().push(jh);
     }
 
     fn cluster(&self) -> &Cluster {
         &self.cluster
     }
 
-    fn new_id(&mut self) -> u32 {
+    fn new_id(&self) -> u32 {
         self.id_gen.fetch_add(1, Ordering::SeqCst)
     }
 }
@@ -133,8 +134,9 @@ impl<R: Receiver, S: Sender> InMemEnv<R, S> {
         InMemEnv {
             id_gen: Arc::new(AtomicU32::new(0)),
             new_channel_fn: new_channel_fn,
-            sender: router,
+            sender: Arc::new(router),
             cluster: Arc::new(Cluster::new()),
+            join_handles: Arc::new(Mutex::new(vec![])),
         }
     }
 }

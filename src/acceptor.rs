@@ -23,7 +23,7 @@ impl Acceptor {
 }
 
 impl Executor for Acceptor {
-    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &E) {
         loop {
             let msg = reciever.get(SLEEP_TIME);
 

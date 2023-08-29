@@ -1,5 +1,14 @@
 use super::message::Message;
-use std::{collections::HashMap, fmt::Display, net::IpAddr, sync::Mutex};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    net::IpAddr,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
+};
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Debug)]
 pub struct ProcessId {
@@ -103,7 +112,7 @@ pub trait Receiver {
 }
 
 pub trait Executor {
-    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &mut E);
+    fn exec<R: Receiver, T: Router, E: Env<T>>(self, reciever: R, env: &'static E);
 }
 
 pub trait Env<T>
@@ -111,12 +120,12 @@ where
     T: Router,
 {
     fn register<E: Executor + Send + 'static>(
-        &mut self,
+        &'static self,
         id: ProcessId,
         t: ProcessType,
         executor: E,
     );
-    fn router(&self) -> T;
+    fn router(&self) -> &T;
     fn cluster(&self) -> &Cluster;
-    fn new_id(&mut self) -> u32;
+    fn new_id(&self) -> u32;
 }

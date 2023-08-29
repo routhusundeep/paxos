@@ -9,3 +9,4 @@ mod proto;
 mod pval;
 pub mod replica;
 mod test;
+mod zmq;

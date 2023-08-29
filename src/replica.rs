@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use log::{info, trace};
 
 use super::{
+    constants::SLEEP_TIME,
     env::{Env, Executor, ProcessId, Receiver, Router},
     message::Message,
-    pval::{Command, SlotNumber}, constants::SLEEP_TIME,
+    pval::{Command, SlotNumber},
 };
 
 pub struct Replica {
@@ -52,7 +53,7 @@ impl Replica {
 }
 
 impl Executor for Replica {
-    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &mut E) {
+    fn exec<R: Receiver, T: Router, E: Env<T>>(mut self, reciever: R, env: &E) {
         loop {
             let msg = reciever.get(SLEEP_TIME);
 

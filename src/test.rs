@@ -18,6 +18,7 @@ mod tests {
 
     use log::{Level, Metadata, Record};
     use log::{LevelFilter, SetLoggerError};
+    use once_cell::sync::Lazy;
 
     struct SimpleLogger;
 
@@ -41,25 +42,30 @@ mod tests {
         log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
     }
 
+    static ENV: Lazy<
+        InMemEnv<crossbeam::channel::Receiver<Message>, crossbeam::channel::Sender<Message>>,
+    > = Lazy::new(|| {
+        InMemEnv::new(|| {
+            let (s, r) = crossbeam::channel::unbounded();
+            return (r, s);
+        })
+    });
+
     #[test]
     fn test_example() {
         init().unwrap();
+
         let n_acceptors = 3;
         let n_replicas = 2;
         let n_leaders = 2;
         let n_requests = 10;
 
-        let mut env = InMemEnv::new(|| {
-            let (s, r) = crossbeam::channel::unbounded();
-            return (r, s);
-        });
-
         let local_host = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let port = 6060;
 
         for i in 1..n_acceptors + 1 {
-            let id = ProcessId::new(local_host, port, env.new_id());
-            env.register(
+            let id = ProcessId::new(local_host, port, ENV.new_id());
+            ENV.register(
                 id.clone(),
                 crate::env::ProcessType::Acceptor,
                 Acceptor::new(id.clone()),
@@ -67,8 +73,8 @@ mod tests {
         }
 
         for i in 1..n_leaders + 1 {
-            let id = ProcessId::new(local_host, port, env.new_id());
-            env.register(
+            let id = ProcessId::new(local_host, port, ENV.new_id());
+            ENV.register(
                 id.clone(),
                 crate::env::ProcessType::Leader,
                 Leader::new(id.clone()),
@@ -76,8 +82,8 @@ mod tests {
         }
 
         for i in 1..n_replicas + 1 {
-            let id = ProcessId::new(local_host, port, env.new_id());
-            env.register(
+            let id = ProcessId::new(local_host, port, ENV.new_id());
+            ENV.register(
                 id.clone(),
                 crate::env::ProcessType::Replica,
                 Replica::new(id.clone()),
@@ -85,10 +91,10 @@ mod tests {
         }
 
         for i in 1..n_requests + 1 {
-            let s = env.router();
-            let client = ProcessId::new(local_host, port, env.new_id());
+            let s = ENV.router();
+            let client = ProcessId::new(local_host, port, ENV.new_id());
 
-            for j in env.cluster().replicas().iter() {
+            for j in ENV.cluster().replicas().iter() {
                 s.send(
                     j,
                     &Message::Request(
@@ -102,7 +108,7 @@ mod tests {
                 )
             }
         }
-
+        loop {}
         thread::sleep(Duration::from_secs(10));
     }
 }
