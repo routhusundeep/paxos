@@ -1,25 +1,29 @@
-use std::{collections::HashMap, fmt::Display, sync::Mutex};
-
-use uuid::Uuid;
-
 use super::message::Message;
+use std::{collections::HashMap, fmt::Display, net::IpAddr, sync::Mutex};
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Debug)]
-pub enum ProcessId {
-    Local(Uuid),
+pub struct ProcessId {
+    pub ip: IpAddr,
+    pub port: u32,
+    pub id: u32,
 }
 impl ProcessId {
-    pub fn new() -> ProcessId {
-        let id = Uuid::new_v4();
-        ProcessId::Local(id)
+    pub fn new(ip: IpAddr, port: u32, id: u32) -> ProcessId {
+        ProcessId {
+            ip: ip,
+            port: port,
+            id: id,
+        }
     }
 }
 
 impl Display for ProcessId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProcessId::Local(u) => write!(f, "{}", u),
-        }
+        write!(
+            f,
+            "ProcessID(ip:{}, port:{}, id:{})",
+            self.ip, self.port, self.id
+        )
     }
 }
 
@@ -114,4 +118,5 @@ where
     );
     fn router(&self) -> T;
     fn cluster(&self) -> &Cluster;
+    fn new_id(&mut self) -> u32;
 }

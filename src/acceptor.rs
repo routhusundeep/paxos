@@ -1,8 +1,9 @@
 use super::{
+    constants::SLEEP_TIME,
     ds::Accepted,
     env::{Env, Executor, ProcessId, Receiver, Router},
     message::Message,
-    pval::{BallotNumber, PValue}, constants::SLEEP_TIME,
+    pval::{BallotNumber, PValue},
 };
 
 pub struct Acceptor {

@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+enum MessageType {
+  P1A = 0;
+  P1B = 1;
+  P2A = 2;
+  P2B = 3;
+  Preempt = 4;
+  Adopt = 5;
+  Decision = 6;
+  Request = 7;
+  Propose = 8;
+}
+
+message Message {
+   MessageType type = 1;
+  ProcessId process = 2;
+  optional BallotNumber ballot = 3;
+  optional uint64 slot = 4;
+  optional Command command = 5;
+  map<uint64, PValue> accepted = 6;
+}
+
+message ProcessId {
+  oneof ip {
+    fixed32 v4 = 1;
+    string v6 = 2;
+  }
+  uint32 port = 3;
+  uint32 id = 4;
+}
+
+message BallotNumber {
+  uint64 round = 1;
+  ProcessId process_id = 2;
+}
+
+message Command {
+  ProcessId client = 1;
+  bytes req_id = 2;
+  bytes operation = 3;
+}
+
+message PValue {
+  BallotNumber ballot = 1;
+  uint64 slot = 2;
+  Command command = 3;
+}

@@ -27,7 +27,7 @@ impl Leader {
     }
 
     fn scout<T: Router, E: Env<T>>(&self, ballot: BallotNumber, env: &mut E) {
-        let sid = ProcessId::new();
+        let sid = ProcessId::new(self.me.ip, self.me.port, env.new_id());
         let scout = Scout::new(sid.clone(), self.me.clone(), self.ballot.clone());
         env.register(scout.me.clone(), ProcessType::Scout, scout);
     }
@@ -39,7 +39,7 @@ impl Leader {
         command: Command,
         env: &mut E,
     ) {
-        let cid = ProcessId::new();
+        let cid = ProcessId::new(self.me.ip, self.me.port, env.new_id());
         let commander = Commander::new(&cid, &self.me, ballot, slot, command);
         env.register(commander.me.clone(), ProcessType::Commander, commander);
     }

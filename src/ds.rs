@@ -31,8 +31,16 @@ impl Accepted {
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, i64, Box<PValue>> {
+    pub fn iter(&self) -> Iter<'_, u64, Box<PValue>> {
         self.m.iter()
+    }
+
+    pub fn map<T>(self, f: fn(PValue) -> T) -> HashMap<u64, T> {
+        let mut res = HashMap::new();
+        for (k, v) in self.m.into_iter().map(|(k, v)| (k, *v)) {
+            res.insert(k, f(v));
+        }
+        res
     }
 }
 

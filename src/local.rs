@@ -2,7 +2,10 @@ use crossbeam::channel;
 use log::debug;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::Duration,
 };
@@ -85,6 +88,7 @@ where
     R: Receiver,
     S: Sender,
 {
+    id_gen: Arc<AtomicU32>,
     new_channel_fn: fn() -> (R, S),
     sender: RouterMap<S>,
     cluster: Arc<Cluster>,
@@ -117,12 +121,17 @@ where
     fn cluster(&self) -> &Cluster {
         &self.cluster
     }
+
+    fn new_id(&mut self) -> u32 {
+        self.id_gen.fetch_add(1, Ordering::SeqCst)
+    }
 }
 
 impl<R: Receiver, S: Sender> InMemEnv<R, S> {
     pub fn new(new_channel_fn: fn() -> (R, S)) -> InMemEnv<R, S> {
         let router = RouterMap::new(1000);
         InMemEnv {
+            id_gen: Arc::new(AtomicU32::new(0)),
             new_channel_fn: new_channel_fn,
             sender: router,
             cluster: Arc::new(Cluster::new()),
