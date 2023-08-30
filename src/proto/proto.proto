@@ -12,8 +12,13 @@ enum MessageType {
   Propose = 8;
 }
 
+message WireMessage {
+  ProcessId to = 1;
+  Message message = 2;
+}
+
 message Message {
-   MessageType type = 1;
+  MessageType type = 1;
   ProcessId process = 2;
   optional BallotNumber ballot = 3;
   optional uint64 slot = 4;

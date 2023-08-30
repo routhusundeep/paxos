@@ -36,7 +36,7 @@ impl Executor for Acceptor {
 
                     env.router().send(
                         &src,
-                        &Message::P1B(self.me.clone(), bc, self.accepted.clone()),
+                        Message::P1B(self.me.clone(), bc, self.accepted.clone()),
                     );
                 }
                 Message::P2A(src, ballot, slot, command) => {
@@ -47,7 +47,7 @@ impl Executor for Acceptor {
                     }
                     env.router().send(
                         &src,
-                        &Message::P2B(self.me.clone(), self.ballot.clone(), slot),
+                        Message::P2B(self.me.clone(), self.ballot.clone(), slot),
                     )
                 }
                 _ => panic!("unexpected message"),

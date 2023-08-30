@@ -1,14 +1,7 @@
+use chashmap::CHashMap;
+
 use super::message::Message;
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    net::IpAddr,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc, Mutex,
-    },
-    thread::{self, JoinHandle},
-};
+use std::{collections::HashMap, fmt::Display, net::IpAddr, slice::Iter, sync::Mutex};
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Hash, Clone, Debug)]
 pub struct ProcessId {
@@ -46,17 +39,17 @@ pub enum ProcessType {
 }
 
 pub struct Cluster {
-    map: Mutex<HashMap<ProcessType, Vec<ProcessId>>>, // TODO: make it concurrent hashmap
+    map: CHashMap<ProcessType, Vec<ProcessId>>,
 }
 
 impl Cluster {
     pub fn new() -> Cluster {
         Cluster {
-            map: Mutex::new(HashMap::new()),
+            map: CHashMap::new(),
         }
     }
 
-    fn copy_vec(s: &Vec<ProcessId>) -> Vec<ProcessId> {
+    fn copy_vec(s: Iter<'_, ProcessId>) -> Vec<ProcessId> {
         let mut res = vec![];
         for i in s.into_iter() {
             res.push(i.clone());
@@ -65,8 +58,7 @@ impl Cluster {
     }
 
     fn get(&self, t: ProcessType) -> Vec<ProcessId> {
-        let guard = self.map.lock();
-        return Self::copy_vec(guard.unwrap().get(&t).unwrap());
+        return Self::copy_vec(self.map.get(&t).unwrap().iter());
     }
 
     pub fn acceptors(&self) -> Vec<ProcessId> {
@@ -82,11 +74,9 @@ impl Cluster {
     }
 
     pub fn add(&self, t: ProcessType, id: ProcessId) {
-        let guard = self.map.lock();
-        let mut m = guard.unwrap();
-        let o = m.get_mut(&t);
+        let o = self.map.get_mut(&t);
         if o.is_none() {
-            m.insert(t, vec![id]);
+            self.map.insert(t, vec![id]);
         } else {
             o.unwrap().push(id);
         }
@@ -94,7 +84,7 @@ impl Cluster {
 }
 
 pub trait Router {
-    fn send(&self, p: &ProcessId, m: &Message);
+    fn send(&self, p: &ProcessId, m: Message);
 }
 
 pub trait Sender {

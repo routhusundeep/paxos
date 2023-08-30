@@ -71,15 +71,16 @@ impl Executor for Leader {
                                 self.proposals.insert(pv.slot, Box::new(pv.command.clone()));
                             }
                         }
+
+                        for (sn, c) in self.proposals.iter() {
+                            self.commander(self.ballot.clone(), *sn, *c.clone(), env);
+                        }
+                        self.active = true;
                     }
-                    for (sn, c) in self.proposals.iter() {
-                        self.commander(self.ballot.clone(), *sn, *c.clone(), env);
-                    }
-                    self.active = true;
                 }
                 Message::Preempt(_, ballot) => {
                     if self.ballot < ballot {
-                        let ballot = BallotNumber::new(ballot.round + 1, self.me.clone());
+                        self.ballot = BallotNumber::new(ballot.round + 1, self.me.clone());
                         self.scout(ballot, env);
                         self.active = false;
                     }
@@ -111,7 +112,7 @@ impl Executor for Scout {
         let msg = Message::P1A(self.me.clone(), self.ballot.clone());
         let mut wait: HashSet<ProcessId> = HashSet::new();
         for a in env.cluster().acceptors().iter() {
-            env.router().send(a, &msg);
+            env.router().send(a, msg.clone());
             wait.insert(a.clone());
         }
 
@@ -123,7 +124,7 @@ impl Executor for Scout {
                 Message::P1B(pid, ballot, accepted) => {
                     if ballot != self.ballot {
                         env.router()
-                            .send(&self.leader, &Message::Preempt(self.me.clone(), ballot));
+                            .send(&self.leader, Message::Preempt(self.me.clone(), ballot));
                         return;
                     }
                     if wait.contains(&pid) {
@@ -133,12 +134,12 @@ impl Executor for Scout {
                 }
                 _ => panic!("not expected"),
             }
-
-            env.router().send(
-                &self.leader,
-                &Message::Adopt(self.me.clone(), self.ballot.clone(), values.clone()),
-            )
         }
+
+        env.router().send(
+            &self.leader,
+            Message::Adopt(self.me.clone(), self.ballot.clone(), values.clone()),
+        )
     }
 }
 
@@ -178,7 +179,7 @@ impl Executor for Commander {
         );
         let mut wait: HashSet<ProcessId> = HashSet::new();
         for a in env.cluster().acceptors().iter() {
-            env.router().send(a, &msg);
+            env.router().send(a, msg.clone());
             wait.insert(a.clone());
         }
 
@@ -192,7 +193,7 @@ impl Executor for Commander {
                         }
                     } else {
                         env.router()
-                            .send(&self.leader, &Message::Preempt(self.me.clone(), ballot));
+                            .send(&self.leader, Message::Preempt(self.me.clone(), ballot));
                         return;
                     }
                 }
@@ -203,7 +204,7 @@ impl Executor for Commander {
         for r in env.cluster().replicas().iter() {
             env.router().send(
                 r,
-                &Message::Decision(self.me.clone(), self.slot, self.command.clone()),
+                Message::Decision(self.me.clone(), self.slot, self.command.clone()),
             );
         }
     }

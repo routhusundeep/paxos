@@ -57,7 +57,7 @@ impl<S> RouterMap<S>
 where
     S: Sender,
 {
-    fn new(sleep: u64) -> RouterMap<S> {
+    fn new() -> RouterMap<S> {
         RouterMap {
             m: Mutex::new(HashMap::new()),
         }
@@ -71,7 +71,7 @@ impl<S: Sender> RouterMap<S> {
 }
 
 impl<S: Sender> Router for RouterMap<S> {
-    fn send(&self, id: &ProcessId, m: &Message) {
+    fn send(&self, id: &ProcessId, m: Message) {
         debug!("{} ----> {} ...... message: {}", m.id(), id, m);
         let guard = self.m.lock();
         match guard.unwrap().get_mut(&id) {
@@ -82,16 +82,39 @@ impl<S: Sender> Router for RouterMap<S> {
 }
 
 #[derive(Clone)]
+pub struct EnvState {
+    id_gen: Arc<AtomicU32>,
+    pub cluster: Arc<Cluster>,
+    join_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
+}
+
+impl EnvState {
+    pub fn new() -> Self {
+        Self {
+            id_gen: Arc::new(AtomicU32::new(0)),
+            cluster: Arc::new(Cluster::new()),
+            join_handles: Arc::new(Mutex::new(vec![])),
+        }
+    }
+    pub fn add(&self, pid: &ProcessId, t: ProcessType, jh: JoinHandle<()>) {
+        self.cluster.add(t, pid.clone());
+        self.join_handles.lock().unwrap().push(jh);
+    }
+
+    pub fn new_id(&self) -> u32 {
+        self.id_gen.fetch_add(1, Ordering::SeqCst)
+    }
+}
+
+#[derive(Clone)]
 pub struct InMemEnv<R, S>
 where
     R: Receiver,
     S: Sender,
 {
-    id_gen: Arc<AtomicU32>,
     new_channel_fn: fn() -> (R, S),
-    sender: Arc<RouterMap<S>>,
-    cluster: Arc<Cluster>,
-    join_handles: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    router: Arc<RouterMap<S>>,
+    state: EnvState,
 }
 
 impl<R, S> Env<RouterMap<S>> for InMemEnv<R, S>
@@ -100,7 +123,7 @@ where
     S: Sender + Send,
 {
     fn router(&self) -> &RouterMap<S> {
-        &self.sender
+        &self.router
     }
 
     fn register<E: Executor + Send + 'static>(
@@ -110,33 +133,29 @@ where
         executor: E,
     ) {
         let (new_receiver, new_sender) = (self.new_channel_fn)();
-        self.sender.add(id.clone(), new_sender);
-        self.cluster.add(t, id.clone());
+        self.router.add(id.clone(), new_sender);
         let clone = self.clone();
         let jh = thread::spawn(move || {
             executor.exec(new_receiver, clone);
         });
-        self.join_handles.lock().unwrap().push(jh);
+        self.state.add(&id, t, jh);
     }
 
     fn cluster(&self) -> &Cluster {
-        &self.cluster
+        &self.state.cluster
     }
 
     fn new_id(&self) -> u32 {
-        self.id_gen.fetch_add(1, Ordering::SeqCst)
+        self.state.new_id()
     }
 }
 
 impl<R: Receiver, S: Sender> InMemEnv<R, S> {
     pub fn new(new_channel_fn: fn() -> (R, S)) -> InMemEnv<R, S> {
-        let router = RouterMap::new(1000);
         InMemEnv {
-            id_gen: Arc::new(AtomicU32::new(0)),
             new_channel_fn: new_channel_fn,
-            sender: Arc::new(router),
-            cluster: Arc::new(Cluster::new()),
-            join_handles: Arc::new(Mutex::new(vec![])),
+            router: Arc::new(RouterMap::new()),
+            state: EnvState::new(),
         }
     }
 }

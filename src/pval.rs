@@ -48,7 +48,7 @@ impl BallotNumber {
 
 impl Display for BallotNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BallotNumber({}{})", self.round, self.process_id)
+        write!(f, "BallotNumber(round:{}, {})", self.round, self.process_id)
     }
 }
 

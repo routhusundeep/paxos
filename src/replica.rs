@@ -35,7 +35,7 @@ impl Replica {
                     self.proposals.insert(i, c.clone());
                     for l in env.cluster().leaders().iter() {
                         env.router()
-                            .send(l, &Message::Propose(self.me.clone(), i, c.clone()));
+                            .send(l, Message::Propose(self.me.clone(), i, c.clone()));
                     }
                     break;
                 }
