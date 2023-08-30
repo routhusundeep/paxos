@@ -30,17 +30,6 @@ impl ProcessId {
     }
 }
 
-#[derive(Clone)]
-pub struct ZMQRouter {
-    context: zmq::Context,
-}
-
-impl ZMQRouter {
-    fn new(c: zmq::Context) -> Self {
-        Self { context: c }
-    }
-}
-
 pub struct WireMessage {
     to: ProcessId,
     message: crate::message::Message,
@@ -65,6 +54,17 @@ impl From<proto::WireMessage> for WireMessage {
 }
 
 static SOCK_COUNT: AtomicU32 = AtomicU32::new(0);
+
+#[derive(Clone)]
+pub struct ZMQRouter {
+    context: zmq::Context,
+}
+
+impl ZMQRouter {
+    fn new(c: zmq::Context) -> Self {
+        Self { context: c }
+    }
+}
 
 impl Router for ZMQRouter {
     fn send(&self, id: &ProcessId, m: crate::message::Message) {

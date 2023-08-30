@@ -11,21 +11,18 @@ Fully functional multi paxos implementation.
 ### state reduction in acceptor
 Acceptor state do not grow exponentially with number of messages. will only store the latest accepted PValue for each slot.
 
-### Support network (partial)
-Currently message communication happens through in-memory channels, will need to extend it to network. [ZMQ](https://zeromq.org/get-started/) will be used for the multicast/socket communication with protobuf for the serde.
+### Decision tracking in leader from colocated nodes
+Leader tracks the decided commands, it reduces the number of retries proposals vastly.
+
+### Support network
+Happens through a combination of in memory queues and sockets. [ZMQ](https://zeromq.org/get-started/) is used for the socket communication with protobuf for the serde. TCP is the only used protocol, can use multicast if needed. 
 
 ## Planned: 
 ### Failure detection
 Will go with a basic heartbeats and timeouts for now, maybe accrual detection if I feel enterprising.
 
-### Use colocation
-The cluster should have the location added to it, should use a combination of TCP and Channel for message delivery. 
-
-### Garbage collection on leader
+### Garbage collection on Acceptor
 should be easy to add by introducing a new message type which will be sent by the replicas when they apply a certain number of commands.
-
-### Support generic state machine at replica
-Right now, the replica is just a log. refactoring it into generic state machine would be helpful.
 
 ### Leases for leader
 Probably requires the biggest change. So will postpone it until the rest of the features are added.
