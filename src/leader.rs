@@ -1,5 +1,5 @@
 use core::panic;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Iter, HashMap, HashSet};
 
 use super::{
     constants::SLEEP_TIME,
@@ -9,11 +9,50 @@ use super::{
     pval::{BallotNumber, Command, SlotNumber},
 };
 
+#[derive(PartialEq, Eq)]
+enum Status {
+    DONE,
+    PENDING,
+}
+
+struct Proposal {
+    command: Command,
+    status: Status,
+}
+
+struct Proposals {
+    m: HashMap<SlotNumber, Proposal>,
+}
+impl Proposals {
+    fn has(&self, slot: &u64) -> bool {
+        self.m.contains_key(slot)
+    }
+
+    fn insert(&mut self, slot: u64, command: Command) {
+        self.m.insert(
+            slot,
+            Proposal {
+                command: command,
+                status: Status::PENDING,
+            },
+        );
+    }
+
+    fn pending(&self) -> impl Iterator<Item = (&SlotNumber, &Proposal)> {
+        self.m.iter().filter(|i| i.1.status == Status::PENDING)
+    }
+
+    fn done(&mut self, slot: &u64) {
+        let x = self.m.get_mut(slot).expect("should always be present");
+        x.status = Status::DONE
+    }
+}
+
 pub struct Leader {
     me: ProcessId,
     ballot: BallotNumber,
     active: bool,
-    proposals: HashMap<SlotNumber, Box<Command>>,
+    proposals: Proposals,
 }
 
 impl Leader {
@@ -22,7 +61,7 @@ impl Leader {
             me: me.clone(),
             ballot: BallotNumber::first(me),
             active: false,
-            proposals: HashMap::new(),
+            proposals: Proposals { m: HashMap::new() },
         }
     }
 
@@ -53,8 +92,8 @@ impl Executor for Leader {
 
             match msg {
                 Message::Propose(_, slot, command) => {
-                    if !self.proposals.contains_key(&slot) {
-                        self.proposals.insert(slot, Box::new(command.clone()));
+                    if !self.proposals.has(&slot) {
+                        self.proposals.insert(slot, command.clone());
                         if self.active {
                             self.commander(self.ballot.clone(), slot, command, env);
                         }
@@ -68,12 +107,12 @@ impl Executor for Leader {
 
                             if bn.map_or(true, |p| p < &self.ballot) {
                                 max.insert(pv.slot, pv.ballot.clone());
-                                self.proposals.insert(pv.slot, Box::new(pv.command.clone()));
+                                self.proposals.insert(pv.slot, pv.command.clone());
                             }
                         }
 
-                        for (sn, c) in self.proposals.iter() {
-                            self.commander(self.ballot.clone(), *sn, *c.clone(), env);
+                        for (sn, c) in self.proposals.pending() {
+                            self.commander(self.ballot.clone(), *sn, (*c).command.clone(), env);
                         }
                         self.active = true;
                     }
@@ -84,6 +123,9 @@ impl Executor for Leader {
                         self.scout(ballot, env);
                         self.active = false;
                     }
+                }
+                Message::Decision(id, slot, command) => {
+                    self.proposals.done(&slot);
                 }
                 _ => panic!("unexpected"),
             }
@@ -201,11 +243,12 @@ impl Executor for Commander {
             }
         }
 
+        let decision = Message::Decision(self.me.clone(), self.slot, self.command.clone());
         for r in env.cluster().replicas().iter() {
-            env.router().send(
-                r,
-                Message::Decision(self.me.clone(), self.slot, self.command.clone()),
-            );
+            env.router().send(r, decision.clone());
         }
+
+        // send it to colocated leader
+        env.router().send(&self.leader, decision);
     }
 }

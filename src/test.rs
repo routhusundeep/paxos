@@ -35,9 +35,12 @@ mod tests {
         replica::Replica,
         zmq::ZMQEnv,
     };
+
     use once_cell::sync::Lazy;
+    use rand::Rng;
     use std::{
         net::{IpAddr, Ipv4Addr},
+        ops::Index,
         thread,
         time::Duration,
     };
@@ -67,7 +70,7 @@ mod tests {
         let n_acceptors = 3;
         let n_replicas = 2;
         let n_leaders = 2;
-        let n_requests = 100;
+        let n_requests = 1000;
 
         let local_host = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let port = 6060;
@@ -80,21 +83,21 @@ mod tests {
 
         thread::sleep(Duration::from_millis(100));
 
-        for _ in 1..n_acceptors + 1 {
-            let id = ProcessId::new(local_host, port, ENV.new_id());
-            ENV.register(
-                id.clone(),
-                crate::env::ProcessType::Acceptor,
-                Acceptor::new(id.clone()),
-            );
-        }
-
         for _ in 1..n_leaders + 1 {
             let id = ProcessId::new(local_host, port, ENV.new_id());
             ENV.register(
                 id.clone(),
                 crate::env::ProcessType::Leader,
                 Leader::new(id.clone()),
+            );
+        }
+
+        for _ in 1..n_acceptors + 1 {
+            let id = ProcessId::new(local_host, port, ENV.new_id());
+            ENV.register(
+                id.clone(),
+                crate::env::ProcessType::Acceptor,
+                Acceptor::new(id.clone()),
             );
         }
 
@@ -111,19 +114,21 @@ mod tests {
             let s = ENV.router();
             let client = ProcessId::new(local_host, port, ENV.new_id());
 
-            for j in ENV.cluster().replicas().iter() {
-                s.send(
-                    j,
-                    Message::Request(
+            let num = rand::thread_rng().gen_range(0..n_replicas);
+
+            let id = ENV.cluster().replicas().index(num).clone();
+            s.send(
+                &id,
+                Message::Request(
+                    client.clone(),
+                    Command::new_from_str(
                         client.clone(),
-                        Command::new_from_str(
-                            client.clone(),
-                            format!("Request:{}", i),
-                            format!("Op:{}", i),
-                        ),
+                        format!("Request:{}", i),
+                        format!("Op:{}", i),
                     ),
-                )
-            }
+                ),
+            );
+            // thread::sleep(Duration::from_millis(100));
         }
 
         thread::sleep(Duration::from_secs(10000));

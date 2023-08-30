@@ -71,11 +71,11 @@ impl Router for ZMQRouter {
         let s = self.context.socket(zmq::PUSH).unwrap();
         assert!(s.connect(&id.addr_sender()).is_ok());
         // info!(
-        //     "socket count: {}, message: {}",
+        //     "socket count: {}, from: {}, message: {}",
         //     SOCK_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+        //     id,
         //     m
         // );
-
         let p: crate::proto::proto::WireMessage = WireMessage {
             to: id.clone(),
             message: m,
@@ -283,39 +283,5 @@ mod tests {
 
         server2.recv(&mut msg, 0).unwrap();
         assert!(msg.as_str().unwrap().eq("Hello server 2"));
-    }
-
-    #[test]
-    fn zmp_example() {
-        let context = zmq::Context::new();
-        let responder = context.socket(zmq::REP).unwrap();
-        assert!(responder.bind("tcp://*:5555").is_ok());
-
-        let requester = context.socket(zmq::REQ).unwrap();
-        assert!(requester.connect("tcp://localhost:5555").is_ok());
-
-        let client = thread::spawn(move || {
-            let mut msg = zmq::Message::new();
-            for request_nbr in 0..10 {
-                println!("Sending Hello {}...", request_nbr);
-                requester.send("Hello", 0).unwrap();
-                requester.recv(&mut msg, 0).unwrap();
-                println!("Received World {}: {}", msg.as_str().unwrap(), request_nbr);
-            }
-        });
-
-        thread::sleep(Duration::from_millis(1000));
-
-        let server: thread::JoinHandle<_> = thread::spawn(move || {
-            let mut msg = zmq::Message::new();
-            for _ in 0..10 {
-                responder.recv(&mut msg, 0).unwrap();
-                println!("Received {}", msg.as_str().unwrap());
-                responder.send("World", 0).unwrap();
-            }
-        });
-
-        _ = server.join();
-        _ = client.join();
     }
 }
